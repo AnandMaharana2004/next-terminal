@@ -64,6 +64,7 @@ type ActiveCall = {
 };
 
 type PreviewCorner = "bottom-left" | "bottom-right" | "top-left" | "top-right";
+type CameraFacingMode = "environment" | "user";
 
 function formatTime(timestamp: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -263,6 +264,73 @@ function MicOffIcon() {
   );
 }
 
+function FlipCameraIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-5 w-5"
+      fill="none"
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M8 7h7a4 4 0 0 1 4 4v1"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.8"
+      />
+      <path
+        d="m17 5 2 2-2 2"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.8"
+      />
+      <path
+        d="M16 17H9a4 4 0 0 1-4-4v-1"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.8"
+      />
+      <path
+        d="m7 19-2-2 2-2"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.8"
+      />
+    </svg>
+  );
+}
+
+function ScreenShareIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-5 w-5"
+      fill="none"
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <rect
+        height="11"
+        rx="2"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        width="16"
+        x="4"
+        y="4"
+      />
+      <path
+        d="M10 20h4M12 15v5"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.8"
+      />
+    </svg>
+  );
+}
+
 export function ChatRoom({
   initialMessages,
   initialUser,
@@ -285,12 +353,30 @@ export function ChatRoom({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeCall, setActiveCall] = useState<ActiveCall | null>(null);
   const [micMuted, setMicMuted] = useState(false);
+  const [cameraFacingMode, setCameraFacingMode] = useState<CameraFacingMode>("user");
+  const [showFlipCamera] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    return window.matchMedia("(pointer: coarse)").matches;
+  });
+  const [canScreenShare] = useState(() => {
+    if (typeof navigator === "undefined") {
+      return false;
+    }
+
+    return Boolean(navigator.mediaDevices?.getDisplayMedia);
+  });
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [previewCorner, setPreviewCorner] = useState<PreviewCorner>("bottom-right");
   const listRef = useRef<HTMLDivElement | null>(null);
   const draftInputRef = useRef<HTMLInputElement | null>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+  const cameraPreviewStreamRef = useRef<MediaStream | null>(null);
+  const displayStreamRef = useRef<MediaStream | null>(null);
   const callStageRef = useRef<HTMLDivElement | null>(null);
   const previewDragRef = useRef<{
     pointerId: number | null;
@@ -321,8 +407,8 @@ export function ChatRoom({
   }, [mobileMenuOpen]);
 
   useEffect(() => {
-    if (localVideoRef.current && localStreamRef.current) {
-      localVideoRef.current.srcObject = localStreamRef.current;
+    if (localVideoRef.current && cameraPreviewStreamRef.current) {
+      localVideoRef.current.srcObject = cameraPreviewStreamRef.current;
     }
 
     if (remoteVideoRef.current && remoteStreamRef.current) {
@@ -342,6 +428,37 @@ export function ChatRoom({
       });
     }, 150);
   }
+
+  const requestCameraStream = useCallback(async (facingMode: CameraFacingMode, includeAudio: boolean) => {
+    const audioConstraint = includeAudio ? { audio: true } : { audio: false };
+
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        ...audioConstraint,
+        video: {
+          facingMode: {
+            exact: facingMode,
+          },
+        },
+      });
+    } catch {
+      try {
+        return await navigator.mediaDevices.getUserMedia({
+          ...audioConstraint,
+          video: {
+            facingMode: {
+              ideal: facingMode,
+            },
+          },
+        });
+      } catch {
+        return navigator.mediaDevices.getUserMedia({
+          ...audioConstraint,
+          video: true,
+        });
+      }
+    }
+  }, []);
 
   const refreshMessages = useCallback(async () => {
     const response = await fetch("/api/chat/messages", {
@@ -366,19 +483,17 @@ export function ChatRoom({
       return localStreamRef.current;
     }
 
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: true,
-    });
+    const stream = await requestCameraStream(cameraFacingMode, true);
 
     localStreamRef.current = stream;
+    cameraPreviewStreamRef.current = new MediaStream(stream.getVideoTracks());
 
     if (localVideoRef.current) {
-      localVideoRef.current.srcObject = stream;
+      localVideoRef.current.srcObject = cameraPreviewStreamRef.current;
     }
 
     return stream;
-  }, []);
+  }, [cameraFacingMode, requestCameraStream]);
 
   const cleanupCallResources = useCallback(() => {
     offerSentForCallRef.current = null;
@@ -411,6 +526,8 @@ export function ChatRoom({
       localVideoRef.current.srcObject = null;
     }
 
+    cameraPreviewStreamRef.current = null;
+
     if (remoteVideoRef.current) {
       remoteVideoRef.current.srcObject = null;
     }
@@ -419,7 +536,16 @@ export function ChatRoom({
       remoteAudioRef.current.srcObject = null;
     }
 
+    if (displayStreamRef.current) {
+      for (const track of displayStreamRef.current.getTracks()) {
+        track.stop();
+      }
+
+      displayStreamRef.current = null;
+    }
+
     setMicMuted(false);
+    setIsScreenSharing(false);
   }, []);
 
   const sendSignal = useCallback(async ({
@@ -461,6 +587,36 @@ export function ChatRoom({
     }
 
     pendingCandidatesRef.current = [];
+  }, []);
+
+  const replaceOutgoingVideoTrack = useCallback(async (nextVideoTrack: MediaStreamTrack) => {
+    const currentStream = localStreamRef.current;
+    const currentAudioTracks = currentStream?.getAudioTracks() ?? [];
+    const oldVideoTracks = currentStream?.getVideoTracks() ?? [];
+
+    for (const oldTrack of oldVideoTracks) {
+      oldTrack.stop();
+      currentStream?.removeTrack(oldTrack);
+    }
+
+    const sender = peerConnectionRef.current
+      ?.getSenders()
+      .find((item) => item.track?.kind === "video");
+
+    if (sender) {
+      await sender.replaceTrack(nextVideoTrack);
+    }
+
+    const composedStream = new MediaStream([...currentAudioTracks, nextVideoTrack]);
+    localStreamRef.current = composedStream;
+  }, []);
+
+  const updateCameraPreviewTrack = useCallback((videoTrack: MediaStreamTrack) => {
+    cameraPreviewStreamRef.current = new MediaStream([videoTrack]);
+
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = cameraPreviewStreamRef.current;
+    }
   }, []);
 
   async function handleJoin(event: React.FormEvent<HTMLFormElement>) {
@@ -866,6 +1022,78 @@ export function ChatRoom({
     setMicMuted(nextMuted);
   }
 
+  async function switchBackToCamera() {
+    const nextCameraStream = await requestCameraStream(cameraFacingMode, false);
+    const nextCameraTrack = nextCameraStream.getVideoTracks()[0];
+
+    if (!nextCameraTrack) {
+      throw new Error("Camera not available.");
+    }
+
+    await replaceOutgoingVideoTrack(nextCameraTrack);
+    updateCameraPreviewTrack(nextCameraTrack.clone());
+    displayStreamRef.current = null;
+    setIsScreenSharing(false);
+  }
+
+  async function handleFlipCamera() {
+    if (!showFlipCamera || isScreenSharing) {
+      return;
+    }
+
+    const nextFacingMode: CameraFacingMode = cameraFacingMode === "user" ? "environment" : "user";
+
+    try {
+      const nextVideoStream = await requestCameraStream(nextFacingMode, false);
+      const nextVideoTrack = nextVideoStream.getVideoTracks()[0];
+
+      if (!nextVideoTrack) {
+        return;
+      }
+
+      await replaceOutgoingVideoTrack(nextVideoTrack);
+      updateCameraPreviewTrack(nextVideoTrack.clone());
+      setCameraFacingMode(nextFacingMode);
+    } catch {
+      setCallError("Could not flip camera.");
+    }
+  }
+
+  async function handleToggleScreenShare() {
+    if (!canScreenShare || !activeCall) {
+      return;
+    }
+
+    setCallError("");
+
+    try {
+      if (isScreenSharing) {
+        await switchBackToCamera();
+        return;
+      }
+
+      const displayStream = await navigator.mediaDevices.getDisplayMedia({
+        audio: false,
+        video: true,
+      });
+      const displayTrack = displayStream.getVideoTracks()[0];
+
+      if (!displayTrack) {
+        return;
+      }
+
+      displayTrack.onended = () => {
+        void switchBackToCamera().catch(() => null);
+      };
+
+      displayStreamRef.current = displayStream;
+      await replaceOutgoingVideoTrack(displayTrack);
+      setIsScreenSharing(true);
+    } catch {
+      setCallError("Could not start screen share.");
+    }
+  }
+
   function getPreviewCornerClasses(corner: PreviewCorner) {
     if (corner === "top-left") {
       return "left-6 top-6 sm:left-8 sm:top-8";
@@ -1206,7 +1434,7 @@ export function ChatRoom({
                     <video
                       ref={localVideoRef}
                       autoPlay
-                      className="aspect-[3/4] w-full scale-x-[-1] bg-black object-cover"
+                      className={`aspect-[3/4] w-full bg-black object-cover ${cameraFacingMode === "user" ? "scale-x-[-1]" : ""}`}
                       muted
                       playsInline
                     />
@@ -1215,6 +1443,29 @@ export function ChatRoom({
                 </div>
 
                 <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
+                  {canScreenShare ? (
+                    <button
+                      aria-label={isScreenSharing ? "Stop screen share" : "Start screen share"}
+                      className={`flex h-12 w-12 items-center justify-center rounded-full text-white shadow-[0_18px_40px_rgba(0,0,0,0.28)] transition sm:h-14 sm:w-14 ${
+                        isScreenSharing ? "bg-emerald-500/70 hover:bg-emerald-500/80" : "bg-white/10 hover:bg-white/16"
+                      }`}
+                      onClick={() => void handleToggleScreenShare()}
+                      type="button"
+                    >
+                      <ScreenShareIcon />
+                    </button>
+                  ) : null}
+                  {showFlipCamera ? (
+                    <button
+                      aria-label="Flip camera"
+                      className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white shadow-[0_18px_40px_rgba(0,0,0,0.28)] transition hover:bg-white/16 disabled:opacity-40 sm:h-14 sm:w-14"
+                      disabled={isScreenSharing}
+                      onClick={() => void handleFlipCamera()}
+                      type="button"
+                    >
+                      <FlipCameraIcon />
+                    </button>
+                  ) : null}
                   <button
                     aria-label={micMuted ? "Unmute microphone" : "Mute microphone"}
                     className={`flex h-12 w-12 items-center justify-center rounded-full text-white shadow-[0_18px_40px_rgba(0,0,0,0.28)] transition sm:h-14 sm:w-14 ${
