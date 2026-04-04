@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Next Terminal",
-  description: "Expose a live terminal session in the browser.",
+  title: "Redis Chat",
+  description: "A simple polling chat UI backed by Redis.",
 };
 
 export default function RootLayout({

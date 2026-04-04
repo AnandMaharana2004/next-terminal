@@ -1,14 +1,15 @@
-import { getCurrentDirectory, isAuthenticated } from "@/lib/auth";
-import { TerminalPage } from "@/components/terminal-page";
+import { ChatRoom } from "@/components/chat-room";
+import { listMessages, listUsers } from "@/lib/chat";
+import { getChatSession } from "@/lib/chat-session";
+
+export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const authenticated = await isAuthenticated();
-  const currentDirectory = await getCurrentDirectory();
+  const [messages, currentUser, users] = await Promise.all([
+    listMessages(),
+    getChatSession(),
+    listUsers(),
+  ]);
 
-  return (
-    <TerminalPage
-      initialAuthenticated={authenticated}
-      initialDirectory={currentDirectory}
-    />
-  );
+  return <ChatRoom initialMessages={messages} initialUser={currentUser} initialUsers={users} />;
 }
