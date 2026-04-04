@@ -36,8 +36,10 @@ const TerminalApp = dynamic(
 
 export function TerminalPage({
   initialAuthenticated,
+  initialDirectory,
 }: {
   initialAuthenticated: boolean;
+  initialDirectory: string;
 }) {
   const [authenticated, setAuthenticated] = useState(initialAuthenticated);
   const [password, setPassword] = useState("");
@@ -124,5 +126,5 @@ export function TerminalPage({
     );
   }
 
-  return <TerminalApp />;
+  return <TerminalApp initialDirectory={initialDirectory} />;
 }

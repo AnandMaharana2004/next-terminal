@@ -1,221 +1,165 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { FitAddon } from "@xterm/addon-fit";
-import { Terminal } from "xterm";
 
-type StreamOutputMessage = {
-  data: string;
-};
-
-type StreamExitMessage = {
+type CommandEntry = {
+  command: string;
+  directory: string;
+  errorOutput: string;
   exitCode: number;
+  id: string;
+  output: string;
 };
 
-export function TerminalApp() {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const terminalRef = useRef<Terminal | null>(null);
-  const sessionIdRef = useRef<string | null>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
-  const resizeObserverRef = useRef<ResizeObserver | null>(null);
-  const pendingInputRef = useRef("");
-  const flushInputPromiseRef = useRef<Promise<void> | null>(null);
-  const resizeRequestRef = useRef<{ cols: number; rows: number } | null>(null);
-  const resizePromiseRef = useRef<Promise<void> | null>(null);
-  const [status, setStatus] = useState("connecting");
+type CommandResponse = {
+  currentDirectory: string;
+  errorOutput: string;
+  exitCode: number;
+  ok: boolean;
+  output: string;
+};
+
+type CompletionResponse = {
+  completedInput: string;
+  matches: Array<{
+    isDirectory: boolean;
+    value: string;
+  }>;
+};
+
+const PROMPT_USER = "anand";
+const PROMPT_HOST = "next-terminal";
+
+function formatPromptPath(directory: string) {
+  const projectRoot = "/home/anand/Programming/next-terminal";
+
+  if (directory === projectRoot) {
+    return "~";
+  }
+
+  if (directory.startsWith(`${projectRoot}/`)) {
+    return `~/${directory.slice(projectRoot.length + 1)}`;
+  }
+
+  return directory;
+}
+
+export function TerminalApp({ initialDirectory }: { initialDirectory: string }) {
+  const transcriptRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [command, setCommand] = useState("");
+  const [history, setHistory] = useState<CommandEntry[]>([]);
+  const [running, setRunning] = useState(false);
+  const [status, setStatus] = useState("ready");
+  const [currentDirectory, setCurrentDirectory] = useState(initialDirectory);
 
   useEffect(() => {
-    const container = containerRef.current;
+    const node = transcriptRef.current;
 
-    if (!container) {
+    if (!node) {
       return;
     }
 
-    const terminal = new Terminal({
-      allowProposedApi: false,
-      convertEol: false,
-      cursorBlink: true,
-      cursorStyle: "block",
-      fontFamily: '"Ubuntu Mono", "Cascadia Mono", "JetBrains Mono", monospace',
-      fontSize: 16,
-      letterSpacing: 0,
-      lineHeight: 1.2,
-      rows: 32,
-      scrollback: 5000,
-      tabStopWidth: 8,
-      theme: {
-        background: "#000000",
-        black: "#000000",
-        blue: "#3465a4",
-        brightBlack: "#555753",
-        brightBlue: "#729fcf",
-        brightCyan: "#34e2e2",
-        brightGreen: "#8ae234",
-        brightMagenta: "#ad7fa8",
-        brightRed: "#ef2929",
-        brightWhite: "#eeeeec",
-        brightYellow: "#fce94f",
-        cursor: "#f8f8f2",
-        cyan: "#06989a",
-        foreground: "#eeeeec",
-        green: "#4e9a06",
-        magenta: "#75507b",
-        red: "#cc0000",
-        selectionBackground: "#ffffff40",
-        white: "#d3d7cf",
-        yellow: "#c4a000",
-      },
-    });
+    node.scrollTop = node.scrollHeight;
+  }, [command, history, running]);
 
-    const fitAddon = new FitAddon();
-    terminalRef.current = terminal;
-    terminal.loadAddon(fitAddon);
-    terminal.open(container);
-    fitAddon.fit();
-    terminal.focus();
-
-    const flushResize = async () => {
-      const sessionId = sessionIdRef.current;
-      const resizeRequest = resizeRequestRef.current;
-
-      if (!sessionId || !resizeRequest) {
-        return;
-      }
-
-      resizeRequestRef.current = null;
-
-      await fetch(`/api/terminal/${sessionId}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(resizeRequest),
-      });
-
-      if (resizeRequestRef.current) {
-        resizePromiseRef.current = flushResize();
-        await resizePromiseRef.current;
-      }
-    };
-
-    const queueResize = () => {
-      resizeRequestRef.current = {
-        cols: terminal.cols,
-        rows: terminal.rows,
-      };
-
-      if (!resizePromiseRef.current) {
-        resizePromiseRef.current = flushResize().finally(() => {
-          resizePromiseRef.current = null;
-        });
-      }
-    };
-
-    const flushInput = async () => {
-      const sessionId = sessionIdRef.current;
-
-      if (!sessionId) {
-        return;
-      }
-
-      const input = pendingInputRef.current;
-
-      if (!input) {
-        return;
-      }
-
-      pendingInputRef.current = "";
-
-      await fetch(`/api/terminal/${sessionId}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ input }),
-      });
-
-      if (pendingInputRef.current) {
-        flushInputPromiseRef.current = flushInput();
-        await flushInputPromiseRef.current;
-      }
-    };
-
-    const queueInput = (input: string) => {
-      pendingInputRef.current += input;
-
-      if (!flushInputPromiseRef.current) {
-        flushInputPromiseRef.current = flushInput().finally(() => {
-          flushInputPromiseRef.current = null;
-        });
-      }
-    };
-
-    const inputDisposable = terminal.onData((data) => {
-      queueInput(data);
-    });
-
-    resizeObserverRef.current = new ResizeObserver(() => {
-      fitAddon.fit();
-      queueResize();
-    });
-    resizeObserverRef.current.observe(container);
-
-    async function startSession() {
-      const response = await fetch("/api/terminal", {
-        method: "POST",
-      });
-
-      if (!response.ok) {
-        setStatus("unavailable");
-        terminal.writeln("Unable to start terminal session.");
-        return;
-      }
-
-      const session = (await response.json()) as { id: string };
-      sessionIdRef.current = session.id;
-      queueResize();
-
-      const eventSource = new EventSource(`/api/terminal/${session.id}/stream`);
-      eventSourceRef.current = eventSource;
-
-      eventSource.addEventListener("output", (event) => {
-        const payload = JSON.parse((event as MessageEvent<string>).data) as StreamOutputMessage;
-        terminal.write(payload.data);
-        setStatus("live");
-      });
-
-      eventSource.addEventListener("exit", (event) => {
-        const payload = JSON.parse((event as MessageEvent<string>).data) as StreamExitMessage;
-        setStatus(`exited (${payload.exitCode})`);
-      });
-
-      eventSource.onerror = () => {
-        setStatus("disconnected");
-      };
+  useEffect(() => {
+    if (running) {
+      return;
     }
 
-    void startSession();
+    inputRef.current?.focus();
+  }, [running]);
 
-    return () => {
-      inputDisposable.dispose();
-      resizeObserverRef.current?.disconnect();
-      resizeObserverRef.current = null;
-      eventSourceRef.current?.close();
-      eventSourceRef.current = null;
+  async function autocompleteCommand() {
+    if (running || command.trim().length === 0) {
+      return;
+    }
 
-      const sessionId = sessionIdRef.current;
-      sessionIdRef.current = null;
+    const response = await fetch("/api/terminal/complete", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ input: command }),
+    });
 
-      if (sessionId) {
-        void fetch(`/api/terminal/${sessionId}`, {
-          method: "DELETE",
-        });
-      }
+    if (!response.ok) {
+      return;
+    }
 
-      terminal.dispose();
-      terminalRef.current = null;
-    };
-  }, []);
+    const result = (await response.json()) as CompletionResponse;
+
+    if (result.completedInput && result.completedInput !== command) {
+      setCommand(result.completedInput);
+      return;
+    }
+
+    if (result.matches.length > 1) {
+      setHistory((current) => [
+        ...current,
+        {
+          command,
+          directory: currentDirectory,
+          errorOutput: "",
+          exitCode: 0,
+          id: `${Date.now()}-${current.length}`,
+          output: result.matches.map((match) => match.value).join("    "),
+        },
+      ]);
+    }
+  }
+
+  async function runCommand(rawCommand: string) {
+    const trimmedCommand = rawCommand.trim();
+
+    if (!trimmedCommand || running) {
+      return;
+    }
+
+    if (trimmedCommand === "clear") {
+      setHistory([]);
+      setCommand("");
+      setStatus("ready");
+      return;
+    }
+
+    setRunning(true);
+    setStatus("running");
+    setCommand("");
+
+    const response = await fetch("/api/terminal", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ command: trimmedCommand }),
+    });
+
+    if (!response.ok && response.status === 401) {
+      setRunning(false);
+      setStatus("locked");
+      return;
+    }
+
+    const result = (await response.json()) as CommandResponse;
+    setCurrentDirectory(result.currentDirectory ?? currentDirectory);
+
+    setHistory((current) => [
+      ...current,
+      {
+        command: trimmedCommand,
+        directory: currentDirectory,
+        errorOutput: result.errorOutput ?? "",
+        exitCode: result.exitCode ?? 1,
+        id: `${Date.now()}-${current.length}`,
+        output: result.output ?? "",
+      },
+    ]);
+
+    setRunning(false);
+    setStatus("ready");
+  }
 
   return (
     <main className="flex min-h-screen bg-[#050505] px-2 py-2 text-stone-100 sm:px-4 sm:py-4">
@@ -232,8 +176,75 @@ export function TerminalApp() {
           <div className="w-14" />
         </div>
 
-        <div className="flex flex-1 bg-black">
-          <div ref={containerRef} className="min-h-[72vh] w-full px-1 py-1 sm:px-2 sm:py-2" />
+        <div
+          ref={transcriptRef}
+          className="flex min-h-[72vh] flex-1 flex-col overflow-auto bg-black px-3 py-3 font-mono text-[14px] leading-[1.35] text-[#d1d5db] sm:px-4 sm:py-4 sm:text-[15px]"
+          onClick={() => {
+            inputRef.current?.focus();
+          }}
+        >
+          {history.map((entry) => (
+            <div key={entry.id} className="mb-3">
+              <div className="flex flex-wrap items-end">
+                <span className="text-[#84cc16]">{PROMPT_USER}</span>
+                <span className="text-white">@</span>
+                <span className="text-[#84cc16]">{PROMPT_HOST}</span>
+                <span className="text-white">:</span>
+                <span className="text-[#60a5fa]">
+                  {formatPromptPath(entry.directory)}
+                </span>
+                <span className="mr-2 text-white">$</span>
+                <span className="text-white">{entry.command}</span>
+              </div>
+              {entry.output ? (
+                <pre className="whitespace-pre-wrap break-words text-[#d1d5db]">
+                  {entry.output}
+                </pre>
+              ) : null}
+              {entry.errorOutput ? (
+                <pre className="whitespace-pre-wrap break-words text-[#f87171]">
+                  {entry.errorOutput}
+                </pre>
+              ) : null}
+              {entry.exitCode !== 0 ? (
+                <p className="text-xs text-amber-300">exit code: {entry.exitCode}</p>
+              ) : null}
+            </div>
+          ))}
+
+          <form
+            className="pt-1"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void runCommand(command);
+            }}
+          >
+            <label className="flex flex-wrap items-center">
+              <span className="text-[#84cc16]">{PROMPT_USER}</span>
+              <span className="text-white">@</span>
+              <span className="text-[#84cc16]">{PROMPT_HOST}</span>
+              <span className="text-white">:</span>
+              <span className="text-[#60a5fa]">{formatPromptPath(currentDirectory)}</span>
+              <span className="mr-2 text-white">$</span>
+              <input
+                autoFocus
+                className="min-w-[240px] flex-1 bg-transparent text-white outline-none"
+                disabled={running}
+                ref={inputRef}
+                onKeyDown={(event) => {
+                  if (event.key === "Tab") {
+                    event.preventDefault();
+                    void autocompleteCommand();
+                  }
+                }}
+                onChange={(event) => {
+                  setCommand(event.target.value);
+                }}
+                spellCheck={false}
+                value={command}
+              />
+            </label>
+          </form>
         </div>
       </section>
     </main>
