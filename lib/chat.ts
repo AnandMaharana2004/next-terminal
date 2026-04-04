@@ -1,4 +1,5 @@
 import { getRedis } from "@/lib/redis";
+import { deleteCallArtifacts } from "@/lib/call";
 
 const CHAT_MESSAGES_KEY = "chat:messages";
 const CHAT_USERS_KEY = "chat:users";
@@ -7,11 +8,18 @@ const MAX_MESSAGES = 100;
 const ONLINE_WINDOW_MS = 15_000;
 
 export type ChatMessage = {
+  callId?: string;
+  createdAt?: string;
+  creatorId?: string;
+  creatorName?: string;
   id: string;
   name: string;
+  participantId?: string;
+  participantName?: string;
+  status?: "active" | "ended" | "pending";
   text: string;
   timestamp: string;
-  type: "message" | "system";
+  type: "call_invite" | "message" | "system";
   userId?: string;
 };
 
@@ -40,7 +48,7 @@ function isChatMessage(value: unknown): value is ChatMessage {
     typeof message.name === "string" &&
     typeof message.text === "string" &&
     typeof message.timestamp === "string" &&
-    (message.type === "message" || message.type === "system")
+    (message.type === "message" || message.type === "system" || message.type === "call_invite")
   );
 }
 
@@ -160,6 +168,7 @@ export async function deleteUserAndMessages(name: string) {
 
   const redis = await getRedis();
   const items = await redis.lRange(CHAT_MESSAGES_KEY, 0, -1);
+  const deletedCallIds = new Set<string>();
   const filteredItems = items.filter((item) => {
     try {
       const parsed = JSON.parse(item) as unknown;
@@ -169,6 +178,9 @@ export async function deleteUserAndMessages(name: string) {
       }
 
       if (parsed.name === cleanedName) {
+        if (parsed.type === "call_invite" && parsed.callId) {
+          deletedCallIds.add(parsed.callId);
+        }
         return false;
       }
 
@@ -193,4 +205,8 @@ export async function deleteUserAndMessages(name: string) {
   }
 
   await multi.exec();
+
+  for (const callId of deletedCallIds) {
+    await deleteCallArtifacts(callId);
+  }
 }
