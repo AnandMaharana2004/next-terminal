@@ -639,16 +639,20 @@ export function ChatRoom({
   }, [messages]);
 
   useEffect(() => {
+    if (activeCall) {
+      return;
+    }
+
     void refreshMessages();
 
     const timer = window.setInterval(() => {
       void refreshMessages();
-    }, 2_000);
+    }, 5_000);
 
     return () => {
       window.clearInterval(timer);
     };
-  }, [refreshMessages]);
+  }, [activeCall, refreshMessages]);
 
   useEffect(() => {
     return () => {
@@ -838,7 +842,7 @@ export function ChatRoom({
 
     const timer = window.setInterval(() => {
       void runPoll(activeCall);
-    }, 2_000);
+    }, 5_000);
 
     return () => {
       window.clearTimeout(initialTimer);
@@ -993,8 +997,8 @@ export function ChatRoom({
           </div>
         </aside>
 
-        <section className="relative flex min-h-[100svh] flex-col overflow-hidden bg-[#0b1413] sm:min-h-[54dvh] sm:rounded-[24px] sm:border sm:border-white/8 sm:bg-[#071312]/90 sm:shadow-[0_30px_80px_rgba(0,0,0,0.35)] lg:min-h-[70vh] lg:rounded-[28px]">
-          <div className="border-b border-white/5 bg-[#10211f] px-3 py-2.5 sm:border-white/10 sm:bg-transparent sm:px-5 sm:py-4">
+        <section className="relative flex h-[100dvh] min-h-[100dvh] flex-col overflow-hidden bg-[#0b1413] sm:h-[54dvh] sm:min-h-[54dvh] sm:rounded-[24px] sm:border sm:border-white/8 sm:bg-[#071312]/90 sm:shadow-[0_30px_80px_rgba(0,0,0,0.35)] lg:h-[70vh] lg:min-h-[70vh] lg:rounded-[28px]">
+          <div className="z-20 shrink-0 border-b border-white/5 bg-[#10211f] px-3 py-2.5 sm:border-white/10 sm:bg-transparent sm:px-5 sm:py-4">
             {currentUser ? (
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -1038,7 +1042,7 @@ export function ChatRoom({
 
           <div
             ref={listRef}
-            className="flex-1 space-y-1.5 overflow-y-auto bg-[#0e1716] px-2 py-2.5 pb-20 sm:space-y-3 sm:bg-transparent sm:px-5 sm:py-5 sm:pb-5"
+            className="min-h-0 flex-1 space-y-1.5 overflow-y-auto bg-[#0e1716] px-2 py-2.5 pb-20 sm:space-y-3 sm:bg-transparent sm:px-5 sm:py-5 sm:pb-5"
           >
             {messages.length > 0 ? (
               messages.map((message) =>
@@ -1106,7 +1110,7 @@ export function ChatRoom({
           </div>
 
           {currentUser ? (
-            <div className="sticky bottom-0 z-20 border-t border-white/5 bg-[#10211f] px-2 py-2 pb-[calc(0.625rem+env(safe-area-inset-bottom))] sm:border-white/10 sm:bg-[#091615]/95 sm:px-5 sm:py-4 sm:pb-4">
+            <div className="z-20 mt-auto shrink-0 border-t border-white/5 bg-[#10211f] px-2 py-2 pb-[calc(0.625rem+env(safe-area-inset-bottom))] sm:border-white/10 sm:bg-[#091615]/95 sm:px-5 sm:py-4 sm:pb-4">
               <form className="flex items-end gap-2" onSubmit={(event) => void handleSend(event)}>
                 <input
                   ref={draftInputRef}
@@ -1138,8 +1142,8 @@ export function ChatRoom({
             <div className="absolute inset-0 z-30 overflow-hidden bg-[linear-gradient(180deg,#173c34_0%,#10231f_24%,#081111_100%)]">
               <audio ref={remoteAudioRef} autoPlay playsInline />
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,#2b6a5d_0%,transparent_36%)] opacity-80" />
-              <div className="relative flex h-full flex-col overflow-hidden">
-                <div className="flex items-start justify-between px-5 pb-3 pt-6 text-white sm:px-7 sm:pt-7">
+              <div className="relative flex h-full min-h-0 flex-col overflow-hidden">
+                <div className="flex items-start justify-between px-5 pb-2 pt-5 text-white sm:px-7 sm:pb-3 sm:pt-6">
                   <div className="flex items-center gap-3">
                     <div
                       className={`flex h-12 w-12 items-center justify-center rounded-full text-sm font-semibold shadow-[0_10px_24px_rgba(0,0,0,0.25)] ${getAvatarTone(
@@ -1175,9 +1179,9 @@ export function ChatRoom({
 
                 <div
                   ref={callStageRef}
-                  className="relative flex flex-1 items-center justify-center overflow-hidden px-4 pb-28 sm:px-6 sm:pb-32"
+                  className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden px-4 pb-24 sm:px-6 sm:pb-28"
                 >
-                  <div className="relative flex h-full max-h-[min(58vh,420px)] w-full max-w-[min(94vw,980px)] items-center justify-center overflow-hidden rounded-[28px] bg-black/45 ring-1 ring-white/8 sm:max-h-[min(64vh,560px)] md:max-h-[min(68vh,620px)]">
+                  <div className="relative flex h-full max-h-[min(50vh,340px)] w-full max-w-[min(92vw,920px)] items-center justify-center overflow-hidden rounded-[28px] bg-black/45 ring-1 ring-white/8 sm:max-h-[min(56vh,430px)] md:max-h-[min(60vh,500px)]">
                     <video
                       ref={remoteVideoRef}
                       autoPlay
@@ -1193,7 +1197,7 @@ export function ChatRoom({
                   </div>
 
                   <div
-                    className={`absolute z-10 w-24 touch-none overflow-hidden rounded-[20px] bg-black/55 shadow-[0_18px_40px_rgba(0,0,0,0.35)] ring-1 ring-white/10 transition-[top,right,bottom,left] duration-200 sm:w-32 md:w-40 ${getPreviewCornerClasses(
+                    className={`absolute z-10 w-20 touch-none overflow-hidden rounded-[18px] bg-black/55 shadow-[0_18px_40px_rgba(0,0,0,0.35)] ring-1 ring-white/10 transition-[top,right,bottom,left] duration-200 sm:w-28 md:w-36 ${getPreviewCornerClasses(
                       previewCorner
                     )}`}
                     onPointerDown={handlePreviewPointerDown}
@@ -1202,7 +1206,7 @@ export function ChatRoom({
                     <video
                       ref={localVideoRef}
                       autoPlay
-                      className="aspect-[3/4] w-full bg-black object-cover"
+                      className="aspect-[3/4] w-full scale-x-[-1] bg-black object-cover"
                       muted
                       playsInline
                     />
@@ -1210,10 +1214,10 @@ export function ChatRoom({
                   </div>
                 </div>
 
-                <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+                <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
                   <button
                     aria-label={micMuted ? "Unmute microphone" : "Mute microphone"}
-                    className={`flex h-14 w-14 items-center justify-center rounded-full text-white shadow-[0_18px_40px_rgba(0,0,0,0.28)] transition ${
+                    className={`flex h-12 w-12 items-center justify-center rounded-full text-white shadow-[0_18px_40px_rgba(0,0,0,0.28)] transition sm:h-14 sm:w-14 ${
                       micMuted ? "bg-white/14 hover:bg-white/20" : "bg-white/10 hover:bg-white/16"
                     }`}
                     onClick={toggleMute}
@@ -1223,7 +1227,7 @@ export function ChatRoom({
                   </button>
                   <button
                     aria-label={activeCall.status === "ended" ? "Close call window" : "End call"}
-                    className="flex h-16 w-16 items-center justify-center rounded-full bg-[#ff4b5c] text-white shadow-[0_18px_40px_rgba(255,75,92,0.32)] transition hover:bg-[#ff6070]"
+                    className="flex h-14 w-14 items-center justify-center rounded-full bg-[#ff4b5c] text-white shadow-[0_18px_40px_rgba(255,75,92,0.32)] transition hover:bg-[#ff6070] sm:h-16 sm:w-16"
                     onClick={() => void handleLeaveCall()}
                     type="button"
                   >
