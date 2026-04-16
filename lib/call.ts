@@ -7,9 +7,11 @@ const CHAT_MESSAGES_KEY = "chat:messages";
 const MAX_MESSAGES = 100;
 
 export type CallStatus = "pending" | "active" | "ended";
+export type CallMode = "audio" | "video";
 
 export type CallInviteMessage = {
   callId: string;
+  callMode: CallMode;
   createdAt: string;
   creatorId: string;
   creatorName: string;
@@ -24,6 +26,7 @@ export type CallInviteMessage = {
 };
 
 type StoredCall = {
+  callMode: CallMode;
   createdAt: string;
   creatorId: string;
   creatorName: string;
@@ -34,6 +37,7 @@ type StoredCall = {
 
 export type CallState = {
   callId: string;
+  callMode: CallMode;
   createdAt: string;
   creatorId: string;
   creatorName: string;
@@ -63,6 +67,7 @@ function mapStoredCall(callId: string, stored: Record<string, string>): CallStat
   }
 
   const status = stored.status as CallStatus;
+  const callMode = stored.callMode === "audio" ? "audio" : "video";
 
   if (!["pending", "active", "ended"].includes(status)) {
     return null;
@@ -70,6 +75,7 @@ function mapStoredCall(callId: string, stored: Record<string, string>): CallStat
 
   return {
     callId,
+    callMode,
     createdAt: stored.createdAt,
     creatorId: stored.creatorId,
     creatorName: stored.creatorName,
@@ -108,9 +114,11 @@ async function replaceCallInviteMessage(callMessage: CallInviteMessage) {
 }
 
 export async function createCallInvite({
+  callMode,
   creatorId,
   creatorName,
 }: {
+  callMode: CallMode;
   creatorId: string;
   creatorName: string;
 }) {
@@ -118,6 +126,7 @@ export async function createCallInvite({
   const callId = randomUUID();
   const createdAt = new Date().toISOString();
   const callState: StoredCall = {
+    callMode,
     createdAt,
     creatorId,
     creatorName,
@@ -127,13 +136,14 @@ export async function createCallInvite({
   };
   const callMessage: CallInviteMessage = {
     callId,
+    callMode,
     createdAt,
     creatorId,
     creatorName,
     id: callId,
     name: creatorName,
     status: "pending",
-    text: `${creatorName} started a video call`,
+    text: `${creatorName} started a ${callMode} call`,
     timestamp: createdAt,
     type: "call_invite",
   };
@@ -187,6 +197,7 @@ export async function joinCall({
   };
   const callMessage: CallInviteMessage = {
     callId,
+    callMode: callState.callMode,
     createdAt: callState.createdAt,
     creatorId: callState.creatorId,
     creatorName: callState.creatorName,
@@ -195,7 +206,7 @@ export async function joinCall({
     participantId: userId,
     participantName: userName,
     status: "active",
-    text: `${callState.creatorName} started a video call`,
+    text: `${callState.creatorName} started a ${callState.callMode} call`,
     timestamp: callState.createdAt,
     type: "call_invite",
   };
@@ -277,6 +288,7 @@ export async function endCall({
 
   const callMessage: CallInviteMessage = {
     callId,
+    callMode: state.callMode,
     createdAt: state.createdAt,
     creatorId: state.creatorId,
     creatorName: state.creatorName,
@@ -285,7 +297,7 @@ export async function endCall({
     participantId: state.participantId ?? undefined,
     participantName: state.participantName ?? undefined,
     status: "ended",
-    text: `${state.creatorName} started a video call`,
+    text: `${state.creatorName} started a ${state.callMode} call`,
     timestamp: state.createdAt,
     type: "call_invite",
   };

@@ -9,6 +9,7 @@ const ONLINE_WINDOW_MS = 15_000;
 
 export type ChatMessage = {
   callId?: string;
+  callMode?: "audio" | "video";
   createdAt?: string;
   creatorId?: string;
   creatorName?: string;

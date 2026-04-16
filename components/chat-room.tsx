@@ -10,6 +10,7 @@ type ChatUser = {
 
 type ChatMessage = {
   callId?: string;
+  callMode?: "audio" | "video";
   createdAt?: string;
   creatorId?: string;
   creatorName?: string;
@@ -44,6 +45,7 @@ type CallPollResponse = {
   }>;
   state: {
     callId: string;
+    callMode: "audio" | "video";
     createdAt: string;
     creatorId: string;
     creatorName: string;
@@ -53,8 +55,11 @@ type CallPollResponse = {
   } | null;
 };
 
+type CallMode = "audio" | "video";
+
 type ActiveCall = {
   callId: string;
+  callMode: CallMode;
   creatorId: string;
   creatorName: string;
   participantId: string | null;
@@ -65,6 +70,18 @@ type ActiveCall = {
 
 type PreviewCorner = "bottom-left" | "bottom-right" | "top-left" | "top-right";
 type CameraFacingMode = "environment" | "user";
+type CameraRequestOptions = {
+  deviceId?: string;
+  includeAudio: boolean;
+  releaseCurrentVideo?: boolean;
+};
+
+const AUDIO_MAX_BITRATE = 32_000;
+const AUDIO_MIN_BITRATE = 16_000;
+const CAMERA_MAX_BITRATE = 350_000;
+const CAMERA_MIN_BITRATE = 120_000;
+const SCREEN_SHARE_MAX_BITRATE = 700_000;
+const SCREEN_SHARE_MIN_BITRATE = 180_000;
 
 function formatTime(timestamp: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -136,6 +153,79 @@ function VideoIcon() {
         stroke="currentColor"
         strokeLinejoin="round"
         strokeWidth="1.8"
+      />
+    </svg>
+  );
+}
+
+function AudioCallIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-5 w-5"
+      fill="none"
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M7.2 5.6c.8-.8 2.2-.8 3 0l1.2 1.2c.7.7.8 1.8.2 2.6l-1.1 1.4c-.2.3-.3.7-.1 1 1 1.8 2.5 3.3 4.3 4.3.3.2.7.1 1-.1l1.4-1.1c.8-.6 1.9-.5 2.6.2l1.2 1.2c.8.8.8 2.2 0 3-.9.9-2.2 1.3-3.4 1.1-3.1-.6-6.1-2.3-8.7-4.9S5.1 11 4.5 7.9c-.2-1.2.2-2.5 1.1-3.4Z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1.8"
+      />
+    </svg>
+  );
+}
+
+function RefreshIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-4.5 w-4.5"
+      fill="none"
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M20 12a8 8 0 1 1-2.34-5.66"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.8"
+      />
+      <path
+        d="M20 4v4h-4"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.8"
+      />
+    </svg>
+  );
+}
+
+function ToggleIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-4.5 w-4.5"
+      fill="none"
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <rect
+        height="8"
+        rx="4"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        width="16"
+        x="4"
+        y="8"
+      />
+      <circle
+        cx="9"
+        cy="12"
+        fill="currentColor"
+        r="2.2"
       />
     </svg>
   );
@@ -264,7 +354,7 @@ function MicOffIcon() {
   );
 }
 
-function FlipCameraIcon() {
+function SoundOnIcon() {
   return (
     <svg
       aria-hidden="true"
@@ -274,29 +364,46 @@ function FlipCameraIcon() {
       xmlns="http://www.w3.org/2000/svg"
     >
       <path
-        d="M8 7h7a4 4 0 0 1 4 4v1"
+        d="M5 14h3l4 4V6L8 10H5v4Z"
         stroke="currentColor"
-        strokeLinecap="round"
-        strokeWidth="1.8"
-      />
-      <path
-        d="m17 5 2 2-2 2"
-        stroke="currentColor"
-        strokeLinecap="round"
         strokeLinejoin="round"
         strokeWidth="1.8"
       />
       <path
-        d="M16 17H9a4 4 0 0 1-4-4v-1"
+        d="M16 9.5a4 4 0 0 1 0 5"
         stroke="currentColor"
         strokeLinecap="round"
         strokeWidth="1.8"
       />
       <path
-        d="m7 19-2-2 2-2"
+        d="M18.5 7a7.5 7.5 0 0 1 0 10"
         stroke="currentColor"
         strokeLinecap="round"
+        strokeWidth="1.8"
+      />
+    </svg>
+  );
+}
+
+function SoundOffIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-5 w-5"
+      fill="none"
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M5 14h3l4 4V6L8 10H5v4Z"
+        stroke="currentColor"
         strokeLinejoin="round"
+        strokeWidth="1.8"
+      />
+      <path
+        d="M16 10.5 20 14.5M20 10.5 16 14.5"
+        stroke="currentColor"
+        strokeLinecap="round"
         strokeWidth="1.8"
       />
     </svg>
@@ -352,15 +459,11 @@ export function ChatRoom({
   const [sending, setSending] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeCall, setActiveCall] = useState<ActiveCall | null>(null);
+  const [refreshingMessages, setRefreshingMessages] = useState(false);
+  const [pollingEnabled, setPollingEnabled] = useState(false);
   const [micMuted, setMicMuted] = useState(false);
-  const [cameraFacingMode, setCameraFacingMode] = useState<CameraFacingMode>("user");
-  const [showFlipCamera] = useState(() => {
-    if (typeof window === "undefined") {
-      return false;
-    }
-
-    return window.matchMedia("(pointer: coarse)").matches;
-  });
+  const [soundMuted, setSoundMuted] = useState(false);
+  const [cameraFacingMode] = useState<CameraFacingMode>("user");
   const [canScreenShare] = useState(() => {
     if (typeof navigator === "undefined") {
       return false;
@@ -392,6 +495,16 @@ export function ChatRoom({
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
   const offerSentForCallRef = useRef<string | null>(null);
+  const currentCameraDeviceIdRef = useRef<string | null>(null);
+
+  const syncRemoteAudioOutput = useCallback(() => {
+    if (!remoteAudioRef.current) {
+      return;
+    }
+
+    remoteAudioRef.current.muted = soundMuted;
+    remoteAudioRef.current.volume = activeCall?.callMode === "audio" ? 1 : 0.82;
+  }, [activeCall?.callMode, soundMuted]);
 
   useEffect(() => {
     if (!mobileMenuOpen) {
@@ -417,9 +530,10 @@ export function ChatRoom({
 
     if (remoteAudioRef.current && remoteStreamRef.current) {
       remoteAudioRef.current.srcObject = remoteStreamRef.current;
+      syncRemoteAudioOutput();
       void remoteAudioRef.current.play().catch(() => null);
     }
-  }, [activeCall]);
+  }, [activeCall, syncRemoteAudioOutput]);
 
   function handleDraftFocus() {
     window.setTimeout(() => {
@@ -429,36 +543,111 @@ export function ChatRoom({
     }, 150);
   }
 
-  const requestCameraStream = useCallback(async (facingMode: CameraFacingMode, includeAudio: boolean) => {
-    const audioConstraint = includeAudio ? { audio: true } : { audio: false };
-
-    try {
-      return await navigator.mediaDevices.getUserMedia({
-        ...audioConstraint,
-        video: {
-          facingMode: {
-            exact: facingMode,
-          },
-        },
-      });
-    } catch {
-      try {
-        return await navigator.mediaDevices.getUserMedia({
-          ...audioConstraint,
-          video: {
-            facingMode: {
-              ideal: facingMode,
+  const requestCameraStream = useCallback(
+    async (
+      facingMode: CameraFacingMode,
+      { deviceId, includeAudio, releaseCurrentVideo = false }: CameraRequestOptions
+    ) => {
+      const audioConstraint = includeAudio
+        ? {
+            audio: {
+              autoGainControl: true,
+              echoCancellation: true,
+              noiseSuppression: true,
             },
-          },
-        });
-      } catch {
-        return navigator.mediaDevices.getUserMedia({
-          ...audioConstraint,
-          video: true,
-        });
+          }
+        : { audio: false };
+      const videoConstraint = {
+        frameRate: {
+          ideal: 12,
+          max: 15,
+        },
+        height: {
+          ideal: 480,
+          max: 480,
+        },
+        width: {
+          ideal: 640,
+          max: 640,
+        },
+      };
+      const currentVideoTracks = localStreamRef.current?.getVideoTracks() ?? [];
+      const stopCurrentVideoTracks = () => {
+        for (const track of currentVideoTracks) {
+          track.stop();
+          localStreamRef.current?.removeTrack(track);
+        }
+      };
+
+      if (deviceId) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            ...audioConstraint,
+            video: {
+              deviceId: {
+                exact: deviceId,
+              },
+              ...videoConstraint,
+            },
+          });
+
+          currentCameraDeviceIdRef.current =
+            stream.getVideoTracks()[0]?.getSettings().deviceId ?? deviceId;
+
+          return stream;
+        } catch {
+          // Fall through to facingMode-based selection.
+        }
       }
-    }
-  }, []);
+
+      const attemptRequest = async () => {
+        try {
+          return await navigator.mediaDevices.getUserMedia({
+            ...audioConstraint,
+            video: {
+              ...videoConstraint,
+              facingMode: {
+                exact: facingMode,
+              },
+            },
+          });
+        } catch {
+          try {
+            return await navigator.mediaDevices.getUserMedia({
+              ...audioConstraint,
+              video: {
+                ...videoConstraint,
+                facingMode: {
+                  ideal: facingMode,
+                },
+              },
+            });
+          } catch {
+            return navigator.mediaDevices.getUserMedia({
+              ...audioConstraint,
+              video: videoConstraint,
+            });
+          }
+        }
+      };
+
+      try {
+        const stream = await attemptRequest();
+        currentCameraDeviceIdRef.current = stream.getVideoTracks()[0]?.getSettings().deviceId ?? null;
+        return stream;
+      } catch (error) {
+        if (!releaseCurrentVideo || currentVideoTracks.length === 0) {
+          throw error;
+        }
+
+        stopCurrentVideoTracks();
+        const stream = await attemptRequest();
+        currentCameraDeviceIdRef.current = stream.getVideoTracks()[0]?.getSettings().deviceId ?? null;
+        return stream;
+      }
+    },
+    []
+  );
 
   const refreshMessages = useCallback(async () => {
     const response = await fetch("/api/chat/messages", {
@@ -478,18 +667,50 @@ export function ChatRoom({
     });
   }, []);
 
-  const ensureLocalStream = useCallback(async () => {
+  async function handleManualRefresh() {
+    setRefreshingMessages(true);
+
+    try {
+      await refreshMessages();
+    } finally {
+      setRefreshingMessages(false);
+    }
+  }
+
+  const ensureLocalStream = useCallback(async (callMode: CallMode) => {
     if (localStreamRef.current) {
       return localStreamRef.current;
     }
 
-    const stream = await requestCameraStream(cameraFacingMode, true);
+    const stream =
+      callMode === "audio"
+        ? await navigator.mediaDevices.getUserMedia({
+            audio: {
+              autoGainControl: true,
+              echoCancellation: true,
+              noiseSuppression: true,
+            },
+            video: false,
+          })
+        : await requestCameraStream(cameraFacingMode, {
+            includeAudio: true,
+          });
 
     localStreamRef.current = stream;
-    cameraPreviewStreamRef.current = new MediaStream(stream.getVideoTracks());
+    const videoTrack = stream.getVideoTracks()[0];
 
-    if (localVideoRef.current) {
-      localVideoRef.current.srcObject = cameraPreviewStreamRef.current;
+    if (videoTrack) {
+      cameraPreviewStreamRef.current = new MediaStream([videoTrack]);
+
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = cameraPreviewStreamRef.current;
+      }
+    } else {
+      cameraPreviewStreamRef.current = null;
+
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = null;
+      }
     }
 
     return stream;
@@ -523,28 +744,37 @@ export function ChatRoom({
     }
 
     if (localVideoRef.current) {
+      localVideoRef.current.pause();
       localVideoRef.current.srcObject = null;
+      localVideoRef.current.load();
     }
 
     cameraPreviewStreamRef.current = null;
 
     if (remoteVideoRef.current) {
+      remoteVideoRef.current.pause();
       remoteVideoRef.current.srcObject = null;
+      remoteVideoRef.current.load();
     }
 
     if (remoteAudioRef.current) {
+      remoteAudioRef.current.pause();
       remoteAudioRef.current.srcObject = null;
+      remoteAudioRef.current.load();
     }
 
     if (displayStreamRef.current) {
       for (const track of displayStreamRef.current.getTracks()) {
+        track.onended = null;
         track.stop();
       }
 
       displayStreamRef.current = null;
     }
 
+    currentCameraDeviceIdRef.current = null;
     setMicMuted(false);
+    setSoundMuted(false);
     setIsScreenSharing(false);
   }, []);
 
@@ -589,7 +819,45 @@ export function ChatRoom({
     pendingCandidatesRef.current = [];
   }, []);
 
-  const replaceOutgoingVideoTrack = useCallback(async (nextVideoTrack: MediaStreamTrack) => {
+  const optimizeSenderForTrack = useCallback(
+    async (sender: RTCRtpSender | undefined, kind: "audio" | "video", videoSource: "camera" | "screen" = "camera") => {
+      if (!sender) {
+        return;
+      }
+
+      const parameters = sender.getParameters();
+      const encodings = parameters.encodings && parameters.encodings.length > 0 ? parameters.encodings : [{}];
+
+      if (kind === "audio") {
+        encodings[0] = {
+          ...encodings[0],
+          maxBitrate: AUDIO_MAX_BITRATE,
+          minBitrate: AUDIO_MIN_BITRATE,
+        };
+      } else {
+        const isScreenShare = videoSource === "screen";
+
+        encodings[0] = {
+          ...encodings[0],
+          maxBitrate: isScreenShare ? SCREEN_SHARE_MAX_BITRATE : CAMERA_MAX_BITRATE,
+          minBitrate: isScreenShare ? SCREEN_SHARE_MIN_BITRATE : CAMERA_MIN_BITRATE,
+          maxFramerate: isScreenShare ? 10 : 15,
+          scaleResolutionDownBy: isScreenShare ? 1 : 1.25,
+        };
+      }
+
+      parameters.encodings = encodings;
+
+      try {
+        await sender.setParameters(parameters);
+      } catch {
+        // Some browsers ignore sender tuning; keep the call running.
+      }
+    },
+    []
+  );
+
+  const replaceOutgoingVideoTrack = useCallback(async (nextVideoTrack: MediaStreamTrack, videoSource: "camera" | "screen" = "camera") => {
     const currentStream = localStreamRef.current;
     const currentAudioTracks = currentStream?.getAudioTracks() ?? [];
     const oldVideoTracks = currentStream?.getVideoTracks() ?? [];
@@ -605,11 +873,12 @@ export function ChatRoom({
 
     if (sender) {
       await sender.replaceTrack(nextVideoTrack);
+      await optimizeSenderForTrack(sender, "video", videoSource);
     }
 
     const composedStream = new MediaStream([...currentAudioTracks, nextVideoTrack]);
     localStreamRef.current = composedStream;
-  }, []);
+  }, [optimizeSenderForTrack]);
 
   const updateCameraPreviewTrack = useCallback((videoTrack: MediaStreamTrack) => {
     cameraPreviewStreamRef.current = new MediaStream([videoTrack]);
@@ -677,22 +946,26 @@ export function ChatRoom({
     await refreshMessages();
   }
 
-  async function handleStartCall() {
+  async function handleStartCall(callMode: CallMode) {
     if (!currentUser || activeCall) {
       return;
     }
 
     setCallError("");
 
-    const mediaOk = await ensureLocalStream().catch(() => null);
+    const mediaOk = await ensureLocalStream(callMode).catch(() => null);
 
     if (!mediaOk) {
-      setCallError("Camera or microphone access was blocked.");
+      setCallError(callMode === "audio" ? "Microphone access was blocked." : "Camera or microphone access was blocked.");
       return;
     }
 
     const response = await fetch("/api/call/request", {
       method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ mode: callMode }),
     });
 
     if (!response.ok) {
@@ -704,6 +977,7 @@ export function ChatRoom({
     const data = (await response.json()) as { callId: string };
     setActiveCall({
       callId: data.callId,
+      callMode,
       creatorId: currentUser.id,
       creatorName: currentUser.name,
       participantId: null,
@@ -720,11 +994,12 @@ export function ChatRoom({
     }
 
     setCallError("");
+    const callMode = message.callMode === "audio" ? "audio" : "video";
 
-    const mediaOk = await ensureLocalStream().catch(() => null);
+    const mediaOk = await ensureLocalStream(callMode).catch(() => null);
 
     if (!mediaOk) {
-      setCallError("Camera or microphone access was blocked.");
+      setCallError(callMode === "audio" ? "Microphone access was blocked." : "Camera or microphone access was blocked.");
       return;
     }
 
@@ -744,6 +1019,7 @@ export function ChatRoom({
 
     setActiveCall({
       callId: message.callId,
+      callMode,
       creatorId: message.creatorId ?? "",
       creatorName: message.creatorName ?? message.name,
       participantId: currentUser.id,
@@ -795,7 +1071,7 @@ export function ChatRoom({
   }, [messages]);
 
   useEffect(() => {
-    if (activeCall) {
+    if (activeCall || !pollingEnabled) {
       return;
     }
 
@@ -808,7 +1084,7 @@ export function ChatRoom({
     return () => {
       window.clearInterval(timer);
     };
-  }, [activeCall, refreshMessages]);
+  }, [activeCall, pollingEnabled, refreshMessages]);
 
   useEffect(() => {
     return () => {
@@ -826,7 +1102,7 @@ export function ChatRoom({
         return peerConnectionRef.current;
       }
 
-      const stream = await ensureLocalStream();
+      const stream = await ensureLocalStream(activeCall.callMode);
       const peerConnection = new RTCPeerConnection({
         iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
       });
@@ -834,6 +1110,16 @@ export function ChatRoom({
       for (const track of stream.getTracks()) {
         peerConnection.addTrack(track, stream);
       }
+
+      await Promise.all(
+        peerConnection.getSenders().map((sender) =>
+          optimizeSenderForTrack(
+            sender,
+            sender.track?.kind === "audio" ? "audio" : "video",
+            "camera"
+          )
+        )
+      );
 
       const remoteStream = new MediaStream();
       remoteStreamRef.current = remoteStream;
@@ -844,6 +1130,7 @@ export function ChatRoom({
 
       if (remoteAudioRef.current) {
         remoteAudioRef.current.srcObject = remoteStream;
+        syncRemoteAudioOutput();
         void remoteAudioRef.current.play().catch(() => null);
       }
 
@@ -854,6 +1141,7 @@ export function ChatRoom({
 
         if (remoteAudioRef.current) {
           remoteAudioRef.current.srcObject = remoteStream;
+          syncRemoteAudioOutput();
           void remoteAudioRef.current.play().catch(() => null);
         }
       };
@@ -923,6 +1211,7 @@ export function ChatRoom({
           current
             ? {
                 ...current,
+                callMode: data.state?.callMode ?? current.callMode,
                 participantId: data.state?.participantId ?? null,
                 participantName: data.state?.participantName ?? null,
                 status: "connecting",
@@ -956,6 +1245,7 @@ export function ChatRoom({
             current
               ? {
                   ...current,
+                  callMode: data.state?.callMode ?? current.callMode,
                   creatorId: data.state?.creatorId ?? current.creatorId,
                   creatorName: data.state?.creatorName ?? current.creatorName,
                   participantId: data.state?.participantId ?? current.participantId,
@@ -1004,7 +1294,7 @@ export function ChatRoom({
       window.clearTimeout(initialTimer);
       window.clearInterval(timer);
     };
-  }, [activeCall, cleanupCallResources, ensureLocalStream, flushPendingCandidates, sendSignal]);
+  }, [activeCall, cleanupCallResources, ensureLocalStream, flushPendingCandidates, optimizeSenderForTrack, refreshMessages, sendSignal, soundMuted, syncRemoteAudioOutput]);
 
   function toggleMute() {
     const stream = localStreamRef.current;
@@ -1022,8 +1312,26 @@ export function ChatRoom({
     setMicMuted(nextMuted);
   }
 
+  function toggleSound() {
+    const nextMuted = !soundMuted;
+
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.muted = nextMuted;
+    }
+
+    setSoundMuted(nextMuted);
+  }
+
   async function switchBackToCamera() {
-    const nextCameraStream = await requestCameraStream(cameraFacingMode, false);
+    if (!activeCall || activeCall.callMode !== "video") {
+      return;
+    }
+
+    const nextCameraStream = await requestCameraStream(cameraFacingMode, {
+      deviceId: currentCameraDeviceIdRef.current ?? undefined,
+      includeAudio: false,
+      releaseCurrentVideo: true,
+    });
     const nextCameraTrack = nextCameraStream.getVideoTracks()[0];
 
     if (!nextCameraTrack) {
@@ -1036,31 +1344,8 @@ export function ChatRoom({
     setIsScreenSharing(false);
   }
 
-  async function handleFlipCamera() {
-    if (!showFlipCamera || isScreenSharing) {
-      return;
-    }
-
-    const nextFacingMode: CameraFacingMode = cameraFacingMode === "user" ? "environment" : "user";
-
-    try {
-      const nextVideoStream = await requestCameraStream(nextFacingMode, false);
-      const nextVideoTrack = nextVideoStream.getVideoTracks()[0];
-
-      if (!nextVideoTrack) {
-        return;
-      }
-
-      await replaceOutgoingVideoTrack(nextVideoTrack);
-      updateCameraPreviewTrack(nextVideoTrack.clone());
-      setCameraFacingMode(nextFacingMode);
-    } catch {
-      setCallError("Could not flip camera.");
-    }
-  }
-
   async function handleToggleScreenShare() {
-    if (!canScreenShare || !activeCall) {
+    if (!canScreenShare || !activeCall || activeCall.callMode !== "video") {
       return;
     }
 
@@ -1087,7 +1372,7 @@ export function ChatRoom({
       };
 
       displayStreamRef.current = displayStream;
-      await replaceOutgoingVideoTrack(displayTrack);
+      await replaceOutgoingVideoTrack(displayTrack, "screen");
       setIsScreenSharing(true);
     } catch {
       setCallError("Could not start screen share.");
@@ -1201,6 +1486,13 @@ export function ChatRoom({
     );
   }
 
+  const activeCallName = activeCall
+    ? activeCall.role === "caller"
+      ? activeCall.participantName ?? "Waiting for participant"
+      : activeCall.creatorName
+    : "Unknown";
+  const activeCallLabel = activeCall?.callMode === "audio" ? "Audio call" : "Video call";
+
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#0f2d27_0%,#0a1716_16%,#081111_100%)] px-0 py-0 text-stone-100 sm:px-4 sm:py-4 lg:px-6 lg:py-6">
       <section className="mx-auto grid min-h-[100dvh] w-full max-w-6xl gap-0 sm:min-h-[calc(100dvh-2rem)] sm:gap-3 lg:min-h-[calc(100vh-3rem)] lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-4">
@@ -1239,10 +1531,44 @@ export function ChatRoom({
                 </div>
                 <div className="flex items-center gap-2">
                   <button
+                    aria-label={refreshingMessages ? "Refreshing messages" : "Refresh messages"}
+                    className="flex h-8 w-8 items-center justify-center rounded-full bg-white/6 text-stone-100 transition hover:bg-white/10 disabled:opacity-50"
+                    disabled={refreshingMessages}
+                    onClick={() => void handleManualRefresh()}
+                    title="Refresh messages"
+                    type="button"
+                  >
+                    <RefreshIcon />
+                  </button>
+                  <button
+                    aria-label={pollingEnabled ? "Turn polling off" : "Turn polling on"}
+                    className={`flex h-8 w-8 items-center justify-center rounded-full transition ${
+                      pollingEnabled
+                        ? "bg-emerald-400/14 text-emerald-200 hover:bg-emerald-400/22"
+                        : "bg-white/6 text-stone-200 hover:bg-white/10"
+                    }`}
+                    onClick={() => {
+                      setPollingEnabled((current) => !current);
+                    }}
+                    title={pollingEnabled ? "Polling on" : "Polling off"}
+                    type="button"
+                  >
+                    <ToggleIcon />
+                  </button>
+                  <button
+                    aria-label="Start audio call"
+                    className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-400/14 text-sky-200 transition hover:bg-sky-400/22 disabled:opacity-50"
+                    disabled={Boolean(activeCall)}
+                    onClick={() => void handleStartCall("audio")}
+                    type="button"
+                  >
+                    <AudioCallIcon />
+                  </button>
+                  <button
                     aria-label="Start video call"
                     className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-400/14 text-emerald-200 transition hover:bg-emerald-400/22 disabled:opacity-50"
                     disabled={Boolean(activeCall)}
-                    onClick={() => void handleStartCall()}
+                    onClick={() => void handleStartCall("video")}
                     type="button"
                   >
                     <VideoIcon />
@@ -1285,7 +1611,9 @@ export function ChatRoom({
                     <div className="w-full max-w-sm rounded-[18px] border border-white/8 bg-white/6 px-4 py-3 text-center">
                       <p className="text-sm text-white">{message.text}</p>
                       <p className="mt-1 text-[11px] text-stone-400">
-                        {message.status === "active" ? "Video call is live" : "Tap below to connect"}
+                        {message.status === "active"
+                          ? `${message.callMode === "audio" ? "Audio" : "Video"} call is live`
+                          : "Tap below to connect"}
                       </p>
                       <div className="mt-3 flex items-center justify-center">{renderCallAction(message)}</div>
                     </div>
@@ -1388,11 +1716,11 @@ export function ChatRoom({
                     </div>
                     <div>
                       <p className="text-lg font-medium text-white">
-                        {activeCall.role === "caller"
-                          ? activeCall.participantName ?? "Waiting for participant"
-                          : activeCall.creatorName}
+                        {activeCallName}
                       </p>
                       <p className="mt-0.5 text-sm text-white/70">
+                        {activeCallLabel}
+                        {" • "}
                         {activeCall.status === "calling"
                           ? "Calling..."
                           : activeCall.status === "ended"
@@ -1409,41 +1737,64 @@ export function ChatRoom({
                   ref={callStageRef}
                   className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden px-4 pb-24 sm:px-6 sm:pb-28"
                 >
-                  <div className="relative flex h-full max-h-[min(50vh,340px)] w-full max-w-[min(92vw,920px)] items-center justify-center overflow-hidden rounded-[28px] bg-black/45 ring-1 ring-white/8 sm:max-h-[min(56vh,430px)] md:max-h-[min(60vh,500px)]">
-                    <video
-                      ref={remoteVideoRef}
-                      autoPlay
-                      className="h-full w-full bg-black object-contain object-center"
-                      playsInline
-                    />
-                    <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/35 to-transparent" />
-                    <div className="absolute bottom-4 left-4 rounded-full bg-black/35 px-3 py-1.5 text-sm text-white/90 backdrop-blur">
-                      {activeCall.role === "caller"
-                        ? activeCall.participantName ?? "Waiting for participant"
-                        : activeCall.creatorName}
-                    </div>
-                  </div>
+                  {activeCall.callMode === "video" ? (
+                    <>
+                      <div className="relative flex h-full max-h-[min(50vh,340px)] w-full max-w-[min(92vw,920px)] items-center justify-center overflow-hidden rounded-[28px] bg-black/45 ring-1 ring-white/8 sm:max-h-[min(56vh,430px)] md:max-h-[min(60vh,500px)]">
+                        <video
+                          ref={remoteVideoRef}
+                          autoPlay
+                          className="h-full w-full bg-black object-contain object-center"
+                          muted
+                          playsInline
+                        />
+                        <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/35 to-transparent" />
+                        <div className="absolute bottom-4 left-4 rounded-full bg-black/35 px-3 py-1.5 text-sm text-white/90 backdrop-blur">
+                          {activeCallName}
+                        </div>
+                      </div>
 
-                  <div
-                    className={`absolute z-10 w-20 touch-none overflow-hidden rounded-[18px] bg-black/55 shadow-[0_18px_40px_rgba(0,0,0,0.35)] ring-1 ring-white/10 transition-[top,right,bottom,left] duration-200 sm:w-28 md:w-36 ${getPreviewCornerClasses(
-                      previewCorner
-                    )}`}
-                    onPointerDown={handlePreviewPointerDown}
-                    onPointerUp={handlePreviewPointerUp}
-                  >
-                    <video
-                      ref={localVideoRef}
-                      autoPlay
-                      className={`aspect-[3/4] w-full bg-black object-cover ${cameraFacingMode === "user" ? "scale-x-[-1]" : ""}`}
-                      muted
-                      playsInline
-                    />
-                    <div className="border-t border-white/8 px-3 py-2 text-xs text-white/85">You</div>
-                  </div>
+                      <div
+                        className={`absolute z-10 w-20 touch-none overflow-hidden rounded-[18px] bg-black/55 shadow-[0_18px_40px_rgba(0,0,0,0.35)] ring-1 ring-white/10 transition-[top,right,bottom,left] duration-200 sm:w-28 md:w-36 ${getPreviewCornerClasses(
+                          previewCorner
+                        )}`}
+                        onPointerDown={handlePreviewPointerDown}
+                        onPointerUp={handlePreviewPointerUp}
+                      >
+                        <video
+                          ref={localVideoRef}
+                          autoPlay
+                          className={`aspect-[3/4] w-full bg-black object-cover ${cameraFacingMode === "user" ? "scale-x-[-1]" : ""}`}
+                          muted
+                          playsInline
+                        />
+                        <div className="border-t border-white/8 px-3 py-2 text-xs text-white/85">You</div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex w-full max-w-md flex-col items-center justify-center rounded-[32px] border border-white/10 bg-black/25 px-8 py-10 text-center shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
+                      <div
+                        className={`flex h-28 w-28 items-center justify-center rounded-full text-4xl font-semibold shadow-[0_14px_40px_rgba(0,0,0,0.28)] ${getAvatarTone(
+                          activeCallName
+                        )}`}
+                      >
+                        {getAvatarLetter(activeCallName)}
+                      </div>
+                      <p className="mt-6 text-2xl font-medium text-white">{activeCallName}</p>
+                      <p className="mt-2 text-sm text-white/70">
+                        {activeCall.status === "calling"
+                          ? "Calling..."
+                          : activeCall.status === "ended"
+                            ? "Call ended"
+                            : activeCall.status === "connected"
+                              ? "Voice call connected"
+                              : "Connecting..."}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
-                  {canScreenShare ? (
+                  {activeCall.callMode === "video" && canScreenShare ? (
                     <button
                       aria-label={isScreenSharing ? "Stop screen share" : "Start screen share"}
                       className={`flex h-12 w-12 items-center justify-center rounded-full text-white shadow-[0_18px_40px_rgba(0,0,0,0.28)] transition sm:h-14 sm:w-14 ${
@@ -1455,17 +1806,16 @@ export function ChatRoom({
                       <ScreenShareIcon />
                     </button>
                   ) : null}
-                  {showFlipCamera ? (
-                    <button
-                      aria-label="Flip camera"
-                      className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white shadow-[0_18px_40px_rgba(0,0,0,0.28)] transition hover:bg-white/16 disabled:opacity-40 sm:h-14 sm:w-14"
-                      disabled={isScreenSharing}
-                      onClick={() => void handleFlipCamera()}
-                      type="button"
-                    >
-                      <FlipCameraIcon />
-                    </button>
-                  ) : null}
+                  <button
+                    aria-label={soundMuted ? "Turn sound on" : "Mute sound"}
+                    className={`flex h-12 w-12 items-center justify-center rounded-full text-white shadow-[0_18px_40px_rgba(0,0,0,0.28)] transition sm:h-14 sm:w-14 ${
+                      soundMuted ? "bg-white/14 hover:bg-white/20" : "bg-white/10 hover:bg-white/16"
+                    }`}
+                    onClick={toggleSound}
+                    type="button"
+                  >
+                    {soundMuted ? <SoundOffIcon /> : <SoundOnIcon />}
+                  </button>
                   <button
                     aria-label={micMuted ? "Unmute microphone" : "Mute microphone"}
                     className={`flex h-12 w-12 items-center justify-center rounded-full text-white shadow-[0_18px_40px_rgba(0,0,0,0.28)] transition sm:h-14 sm:w-14 ${
