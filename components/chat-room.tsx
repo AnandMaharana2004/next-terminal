@@ -77,11 +77,8 @@ type CameraRequestOptions = {
 };
 
 const AUDIO_MAX_BITRATE = 32_000;
-const AUDIO_MIN_BITRATE = 16_000;
 const CAMERA_MAX_BITRATE = 350_000;
-const CAMERA_MIN_BITRATE = 120_000;
 const SCREEN_SHARE_MAX_BITRATE = 700_000;
-const SCREEN_SHARE_MIN_BITRATE = 180_000;
 
 function formatTime(timestamp: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -832,7 +829,6 @@ export function ChatRoom({
         encodings[0] = {
           ...encodings[0],
           maxBitrate: AUDIO_MAX_BITRATE,
-          minBitrate: AUDIO_MIN_BITRATE,
         };
       } else {
         const isScreenShare = videoSource === "screen";
@@ -840,7 +836,6 @@ export function ChatRoom({
         encodings[0] = {
           ...encodings[0],
           maxBitrate: isScreenShare ? SCREEN_SHARE_MAX_BITRATE : CAMERA_MAX_BITRATE,
-          minBitrate: isScreenShare ? SCREEN_SHARE_MIN_BITRATE : CAMERA_MIN_BITRATE,
           maxFramerate: isScreenShare ? 10 : 15,
           scaleResolutionDownBy: isScreenShare ? 1 : 1.25,
         };
@@ -1097,12 +1092,12 @@ export function ChatRoom({
       return;
     }
 
-    async function ensurePeerConnection(targetUserId: string, callId: string) {
+    async function ensurePeerConnection(targetUserId: string, callId: string, call: ActiveCall) {
       if (peerConnectionRef.current) {
         return peerConnectionRef.current;
       }
 
-      const stream = await ensureLocalStream(activeCall.callMode);
+      const stream = await ensureLocalStream(call.callMode);
       const peerConnection = new RTCPeerConnection({
         iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
       });
@@ -1197,7 +1192,7 @@ export function ChatRoom({
         data.state.participantId &&
         offerSentForCallRef.current !== call.callId
       ) {
-        const peerConnection = await ensurePeerConnection(data.state.participantId, call.callId);
+        const peerConnection = await ensurePeerConnection(data.state.participantId, call.callId, call);
         const offer = await peerConnection.createOffer();
         await peerConnection.setLocalDescription(offer);
         await sendSignal({
@@ -1228,7 +1223,7 @@ export function ChatRoom({
         }
 
         if (signal.signalType === "offer") {
-          const peerConnection = await ensurePeerConnection(signal.fromUserId, call.callId);
+          const peerConnection = await ensurePeerConnection(signal.fromUserId, call.callId, call);
           await peerConnection.setRemoteDescription(
             new RTCSessionDescription(signal.payload as RTCSessionDescriptionInit)
           );

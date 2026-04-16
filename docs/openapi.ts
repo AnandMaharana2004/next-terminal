@@ -704,7 +704,16 @@ export const apiDocsSections = [
   },
 ] as const;
 
-export const apiReference = [
+type ApiEndpoint = {
+  method: string;
+  path: string;
+  tag: string;
+  summary: string;
+  requestExample?: unknown;
+  responseExample: unknown;
+};
+
+export const apiReference: ApiEndpoint[] = [
   {
     method: "POST",
     path: "/api/chat/join",

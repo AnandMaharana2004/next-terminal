@@ -7,7 +7,7 @@ const CHAT_MESSAGES_KEY = "chat:messages";
 const MAX_MESSAGES = 100;
 
 export type CallStatus = "pending" | "active" | "ended";
-export type CallMode = "audio" | "video";
+export type CallMode = "audio" | "board" | "video";
 
 export type CallInviteMessage = {
   callId: string;
@@ -67,7 +67,7 @@ function mapStoredCall(callId: string, stored: Record<string, string>): CallStat
   }
 
   const status = stored.status as CallStatus;
-  const callMode = stored.callMode === "audio" ? "audio" : "video";
+  const callMode = stored.callMode === "audio" || stored.callMode === "board" ? stored.callMode : "video";
 
   if (!["pending", "active", "ended"].includes(status)) {
     return null;
@@ -113,6 +113,14 @@ async function replaceCallInviteMessage(callMessage: CallInviteMessage) {
   await multi.exec();
 }
 
+function getCallInviteText(callMode: CallMode, creatorName: string) {
+  if (callMode === "board") {
+    return `${creatorName} started a magic board`;
+  }
+
+  return `${creatorName} started a ${callMode} call`;
+}
+
 export async function createCallInvite({
   callMode,
   creatorId,
@@ -143,7 +151,7 @@ export async function createCallInvite({
     id: callId,
     name: creatorName,
     status: "pending",
-    text: `${creatorName} started a ${callMode} call`,
+    text: getCallInviteText(callMode, creatorName),
     timestamp: createdAt,
     type: "call_invite",
   };
@@ -206,7 +214,7 @@ export async function joinCall({
     participantId: userId,
     participantName: userName,
     status: "active",
-    text: `${callState.creatorName} started a ${callState.callMode} call`,
+    text: getCallInviteText(callState.callMode, callState.creatorName),
     timestamp: callState.createdAt,
     type: "call_invite",
   };
@@ -297,7 +305,7 @@ export async function endCall({
     participantId: state.participantId ?? undefined,
     participantName: state.participantName ?? undefined,
     status: "ended",
-    text: `${state.creatorName} started a ${state.callMode} call`,
+    text: getCallInviteText(state.callMode, state.creatorName),
     timestamp: state.createdAt,
     type: "call_invite",
   };
